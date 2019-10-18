@@ -33,7 +33,10 @@ class DlogicReader extends EventEmitter {
         this.serialport = serialport;
         this.buffer = new Buffer.from([]);
         this.HW_INIT_TIME  = 100;//100ms to init hw after reset
-        this.CMD_TIMEOUT   = 1000;//100ms to init hw after reset
+        
+        this.CMD_TIMEOUT   = 80;//20ms to timeout cmd
+        this.TIMEOUT_MSG   ='cmd timeout';
+        this.hdl_timeout =null;
 
         this._processBuffer = this._processBuffer.bind(this);
         this.serialport.on('error', (error) => {
@@ -75,37 +78,54 @@ class DlogicReader extends EventEmitter {
             //console.log('receive: ', util.to_hex_string(this.buffer));
             let fr_type = this.buffer[0];
             this.emit('frame',{type:fr_type,buffer:this.buffer});
-            // switch (fr_type) {
-            //     case CODE.ERR_HEADER:
-            //         this.emit('frame_err', this.buffer);
-            //         break;
-            //     case CODE.ACK_HEADER:
-            //         this.emit('frame_ack', this.buffer);
-            //         break;
-            //     case CODE.RESPONSE_HEADER:
-            //         this.emit('frame_resp', this.buffer);
-            //         break;
-            //     default:
-            //         this.emit('frame_unknown', this.buffer);
-            //         break;
-            // }           
+         
         }
     }
 
+    //GET_DLOGIC_CARD_TYPE (0x3C)
+    get_dlogic_card_type(){
+            return new  Promise((resolve,reject)=>{
+             
+                let on_frame=(frame)=>{
+                   
+                    switch (frame.type) {
+                        case  CODE.ERR_HEADER: /* No card */ 
+                            let err_code = frame.buffer[1];
+                            if(err_code==CODE.NO_CARD){
+                                resolve({is_available:false,card_type:0,details:util.get_card_type_from_code(0)});
+                            }else{
+                                reject(frame);
+                            }
+                            break;
+                        case CODE.RESPONSE_HEADER:/*have card */
+                            let card_type =frame.buffer[4];
+                            let resp={
+                                is_available:true,
+                                card_type:card_type,
+                                details:util.get_card_type_from_code(card_type)
+                            };
+                            resolve(resp);
+                            break;
+                        default:
+                            reject('invalid resp');
+                            break;
+                    }
+                };
+                //only fire ontime
+                this.once('frame',on_frame);
+    
+               
+                //GET_DLOGIC_CARD_TYPE (0x3C)
+                this.send_command("55 3C AA 00 00 00 CA");
+            });
+    }
     //GET_CARD_ID_EX (0x2C)  : Use this function for cards with UID longer than 4 byte
     get_card_id_ex(){
         return new  Promise((resolve,reject)=>{
-            
-          
-            //there are limitted number of listener(255).So in oder to use
-            //for long time, you need to remove listener after finish the cmd
-            let remove_listener = () => {
-                this.removeListener('frame', on_frame);
-            };
-       
-
+         
             let on_frame=(frame)=>{
-                remove_listener();//remove to resever for next  time
+              //  remove_listener();//remove to resever for next  time
+             
                 switch (frame.type) {
                     case  CODE.ERR_HEADER: /* No card */
                       
@@ -131,66 +151,66 @@ class DlogicReader extends EventEmitter {
                         else{
                             reject('invalid resp');
                         }
-                      
-
                         break;
                     default:
+                        reject('invalid resp');
                         break;
                 }
             };
-            this.on('frame',on_frame);
+            this.once('frame',on_frame);//onetime fire
 
-           
-            //cmd SELF_RESET (0X30)
+            //GET_CARD_ID_EX (0x2C)  : Use this function for cards with UID longer than 4 byte
             this.send_command("55 2C AA 00 00 00 DA");
         });
     }
     self_reset(){
         return new  Promise((resolve,reject)=>{
- 
-         
-            //there are limitted number of listener(255).So in oder to use
-            //for long time, you need to remove listener after finish the cmd
-            let remove_listener = () => {
-                this.removeListener('frame', on_frame);
-              
-            };
+          
             let on_frame=(frame)=>{
-                remove_listener();//remove to resever for next  time
+               
                 resolve('Reset OK');
             };
-            this.on('frame',on_frame);
-           
+            this.once('frame',on_frame);
             //cmd SELF_RESET (0X30)
             this.send_command("55 30 AA 00 00 00 D6");
         });
     }
     get_reader_type(){
         return new  Promise((resolve,reject)=>{
-          
-            //there are limitted number of listener(255).So in oder to use
-            //for long time, you need to remove listener after finish the cmd
-            let remove_listener = () => {
-                this.removeListener('frame', on_frame);
-            };
+  
+
             let on_frame=(frame)=>{
+               
                 //{type:fr_type,buffer:this.buffer}
                 if(frame.type==CODE.RESPONSE_HEADER){
-                    remove_listener();//remove to resever for next  time
                     resolve(frame.buffer);
                 }else{
-                    remove_listener();////remove to resever for next  time
                     reject(frame.buffer);
                 }
             };
-            this.on('frame',on_frame);
-
-           
+            this.once('frame',on_frame);
             //cmd GET_READER_TYPE (0x10)
             this.send_command("55 10 AA 00 00 00 F6");
         });
     }
-   
+    //GET_FIRMWARE_VERSION (0x29)
+    get_firmware_version(){
+        return new  Promise((resolve,reject)=>{
+            let on_frame=(frame)=>{
+                //{type:fr_type,buffer:this.buffer}
+                if(frame.type==CODE.RESPONSE_HEADER){
+                    let fw_version=frame.buffer[4].toString(10)+"."+frame.buffer[5].toString(10);
+                    resolve(fw_version);
+                }else{
+                    reject(frame.buffer);
+                }
+            };
+            this.once('frame',on_frame);
+            //cmd GET_READER_TYPE (0x10)
+            this.send_command("55 29 AA 00 00 00 DD");
+        });
+    }
+    
     send_command(cmd_infor){
         let sn_buff="";
         if(util.is_string(cmd_infor)){

@@ -28,17 +28,14 @@ reader.on('ready', async (msg) => {
   let last = ''
   setInterval(async () => {
 
-    let res = await reader.get_card_id_ex();
+    let res = await reader.get_firmware_version();
+    console.log(res);
     if (res.is_available) {
-      let uid = res.uid;
-      if(last !==uid){
-        console.log(res);
-        last = uid;
-      }
+      console.log(res);
     }
   
 
 
-  }, 100);
+  }, 1000);
 
 })
