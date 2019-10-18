@@ -72,7 +72,7 @@ class DlogicReader extends EventEmitter {
     _processBuffer() {
        
         if (DlogicFrame.is_valid_frame(this.buffer)) {
-            console.log('receive: ', util.to_hex_string(this.buffer));
+            //console.log('receive: ', util.to_hex_string(this.buffer));
             let fr_type = this.buffer[0];
             this.emit('frame',{type:fr_type,buffer:this.buffer});
             // switch (fr_type) {
@@ -93,19 +93,46 @@ class DlogicReader extends EventEmitter {
     }
 
     //GET_CARD_ID_EX (0x2C)  : Use this function for cards with UID longer than 4 byte
-    get_card_id_ex(timeout_ms=this.CMD_TIMEOUT){
+    get_card_id_ex(){
         return new  Promise((resolve,reject)=>{
+            
+          
             //there are limitted number of listener(255).So in oder to use
             //for long time, you need to remove listener after finish the cmd
             let remove_listener = () => {
                 this.removeListener('frame', on_frame);
             };
+       
+
             let on_frame=(frame)=>{
+                remove_listener();//remove to resever for next  time
                 switch (frame.type) {
                     case  CODE.ERR_HEADER: /* No card */
-                        
+                      
+                        let err_code = frame.buffer[1];
+                        if(err_code==CODE.NO_CARD){
+                            resolve({is_available:false,uid_len:0,uid:''});
+                        }else{
+                            reject(frame);
+                        }
                         break;
                     case CODE.RESPONSE_HEADER:/*have card */
+                        let uid_len =frame.buffer[5];
+                        let resp={
+                            is_available:true
+                        };
+                        if(this.buffer.length >= (CODE.PACKET_LENGTH+uid_len)){
+                            let uid_buffer =  new  Buffer.alloc(uid_len);
+                            frame.buffer.copy(uid_buffer,0,7,7+uid_len);
+                            resp.uid_len=uid_len;
+                            resp.uid = util.to_hex_string(uid_buffer);
+                            resolve(resp);
+                        }
+                        else{
+                            reject('invalid resp');
+                        }
+                      
+
                         break;
                     default:
                         break;
@@ -113,41 +140,34 @@ class DlogicReader extends EventEmitter {
             };
             this.on('frame',on_frame);
 
-            setTimeout(()=>{
-                reject('cmd_timeout');
-            },timeout_ms);
+           
             //cmd SELF_RESET (0X30)
             this.send_command("55 2C AA 00 00 00 DA");
         });
     }
-    self_reset(timeout_ms=this.CMD_TIMEOUT){
+    self_reset(){
         return new  Promise((resolve,reject)=>{
+ 
+         
             //there are limitted number of listener(255).So in oder to use
             //for long time, you need to remove listener after finish the cmd
             let remove_listener = () => {
                 this.removeListener('frame', on_frame);
+              
             };
             let on_frame=(frame)=>{
-                //{type:fr_type,buffer:this.buffer}
-                if(frame.type==CODE.RESPONSE_HEADER){
-                    remove_listener();//remove to resever for next  time
-                    resolve(frame.buffer);
-                }else{
-                    remove_listener();////remove to resever for next  time
-                    reject(frame.buffer);
-                }
+                remove_listener();//remove to resever for next  time
+                resolve('Reset OK');
             };
             this.on('frame',on_frame);
-
-            setTimeout(()=>{
-                reject('cmd_timeout');
-            },timeout_ms);
+           
             //cmd SELF_RESET (0X30)
             this.send_command("55 30 AA 00 00 00 D6");
         });
     }
-    get_reader_type(timeout_ms=this.CMD_TIMEOUT){
+    get_reader_type(){
         return new  Promise((resolve,reject)=>{
+          
             //there are limitted number of listener(255).So in oder to use
             //for long time, you need to remove listener after finish the cmd
             let remove_listener = () => {
@@ -165,9 +185,7 @@ class DlogicReader extends EventEmitter {
             };
             this.on('frame',on_frame);
 
-            setTimeout(()=>{
-                reject('cmd_timeout');
-            },timeout_ms);
+           
             //cmd GET_READER_TYPE (0x10)
             this.send_command("55 10 AA 00 00 00 F6");
         });
