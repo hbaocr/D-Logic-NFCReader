@@ -3,8 +3,6 @@ const CODE = require('./constant');
 const logger = require('winston').loggers.get('uRFReader');
 const EventEmitter = require('events').EventEmitter;
 
-
-
 class DlogicFrame {
 
     static is_err_frame(buffer) {

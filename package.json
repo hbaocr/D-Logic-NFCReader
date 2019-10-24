@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "await-timeout": "^0.6.0",
+    "ndef": "^0.2.0",
     "serialport": "^7.1.5",
     "winston": "^3.2.1"
   }

@@ -2,9 +2,11 @@
 // var buf = new Buffer.from([0x55, 0x11, 0xAA, 0x00,0x00, 0x00]);
 // console.log(urfReader.crc_calc(buf).toString(16))
 
-const EventEmiter =require('events').EventEmiter;
-const DlogicReader = require('./DlogicReader');
+const EventEmitter = require('events').EventEmitter;
 const SerialPort = require('serialport');
+const DlogicReader = require('./DlogicReader');
+const ndef = require('ndef');
+const timeout = require('await-timeout');
 
 const port = new SerialPort('/dev/cu.usbserial-A62NZGPJ', {
   //const port = new SerialPort('/dev/cu.usbserial-AL00FN6X', {
@@ -13,44 +15,51 @@ const port = new SerialPort('/dev/cu.usbserial-A62NZGPJ', {
   autoOpen: true,
 });
 
-
+const reader_hdl = new EventEmitter();
 let reader = new DlogicReader(port);
 reader.clear_rx_cache();
 
 
+let messages = [
+  ndef.uriRecord('http://www.google.com/qwertyuiopasdsfghjhgfdsfghgdfstdrghkjlkjhkjl'),
+  ndef.textRecord('12345678901234567890123456789012345678901234567890abcdefighklmn')
+];
+let data = ndef.encodeMessage(messages);
 
+const gap_cmd_time = 80;//100ms
+let t = Date.now();
+let lasttime = t;
+let last = ''
 
 reader.on('ready', async (msg) => {
   console.log(msg);
   reader.clear_rx_cache();
-  
-  reader.linear_write_PK("ABCDEFIJKLMNOPQRSTUVXYZ",0).then((e)=>{
-    console.log(e);
-  }).catch((e)=>{
-    console.log(e);
+  reader_hdl.removeAllListeners('next_scan');//remove all listener before
+
+  reader_hdl.on('next_scan', async (msg) => {
+    try {
+      let res = await reader.get_card_id_ex();
+      if (res.is_available) {
+        if (last !== res.uid) {
+          let t = Date.now();
+          dt = t - lasttime;
+          lasttime = t;
+          console.log(dt, res);
+          last = res.uid;
+          let resp = await reader.linear_write_PK(data, 0);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+    }
+
+    setTimeout(() => {
+      reader_hdl.emit('next_scan', 'next tag');
+    }, gap_cmd_time);
+
   })
 
-  //reader.send_command(new Buffer.from([0x55, 0x10, 0xAA, 0x00, 0x00, 0x00, 0xF6]))
-  //reader.send_command("55 10 AA 00 00 00 F6");
-  //let res = await reader.get_reader_type();
-  // let last = '';
-  // let lasttime =Date.now();
-  // setInterval(async () => {
-
-  //   let res = await  reader.get_card_id_ex();
-  //   //console.log(res);
-  //   if (res.is_available) {
-  //     if(last !== res.uid){
-  //       let t  =Date.now();
-  //       dt =t-lasttime;
-  //       lasttime=t;
-  //       console.log(dt,res);
-  //       last=res.uid;
-  //     }
-  //   }
-
-  // }, 100);
-
+  reader_hdl.emit('next_scan');
 
 
 })
