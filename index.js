@@ -2,7 +2,7 @@
 // var buf = new Buffer.from([0x55, 0x11, 0xAA, 0x00,0x00, 0x00]);
 // console.log(urfReader.crc_calc(buf).toString(16))
 
-
+const EventEmiter =require('events').EventEmiter;
 const DlogicReader = require('./DlogicReader');
 const SerialPort = require('serialport');
 
@@ -19,23 +19,38 @@ reader.clear_rx_cache();
 
 
 
+
 reader.on('ready', async (msg) => {
   console.log(msg);
-  //reader.clear_rx_cache();
+  reader.clear_rx_cache();
+  
+  reader.block_write_PK("STUV",4).then((e)=>{
+    console.log(e);
+  }).catch((e)=>{
+    console.log(e);
+  })
+
   //reader.send_command(new Buffer.from([0x55, 0x10, 0xAA, 0x00, 0x00, 0x00, 0xF6]))
   //reader.send_command("55 10 AA 00 00 00 F6");
   //let res = await reader.get_reader_type();
-  let last = ''
-  setInterval(async () => {
+  // let last = '';
+  // let lasttime =Date.now();
+  // setInterval(async () => {
 
-    let res = await reader.get_firmware_version();
-    console.log(res);
-    if (res.is_available) {
-      console.log(res);
-    }
-  
+  //   let res = await  reader.get_card_id_ex();
+  //   //console.log(res);
+  //   if (res.is_available) {
+  //     if(last !== res.uid){
+  //       let t  =Date.now();
+  //       dt =t-lasttime;
+  //       lasttime=t;
+  //       console.log(dt,res);
+  //       last=res.uid;
+  //     }
+  //   }
+
+  // }, 100);
 
 
-  }, 1000);
 
 })
