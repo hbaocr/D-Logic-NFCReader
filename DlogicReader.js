@@ -35,11 +35,11 @@ class DlogicReader extends EventEmitter {
         this.serialport = serialport;
         this.buffer = new Buffer.from([]);
         this.HW_INIT_TIME = 100;//100ms to init hw after reset
-
+        this.DEFAULT_GAP_TIME_BETWEEN_CMD=60;
         this.CMD_TIMEOUT = 10;//20ms to timeout cmd
         this.TIMEOUT_MSG = 'cmd timeout';
         this.hdl_timeout = null;
-
+        this.gap_time = this.DEFAULT_GAP_TIME_BETWEEN_CMD;
         this._processBuffer = this._processBuffer.bind(this);
         this.serialport.on('error', (error) => {
             this.emit('port_err', error);
@@ -55,8 +55,7 @@ class DlogicReader extends EventEmitter {
             }
             this.serialport.set({ rts: false }, () => {
 
-                let msg = 'PIN rts is low.UrfReader Ready to work in normal mode';
-                console.log(msg);
+                let msg = 'PIN rts is low. uFR_Reader is ready to work in normal mode';
                 setTimeout(() => {
                     //reader.send_command(new Buffer.from([0x55, 0x10, 0xAA, 0x00, 0x00, 0x00, 0xF6]))
                     this.emit('ready', msg);
@@ -71,6 +70,9 @@ class DlogicReader extends EventEmitter {
         });
     }
 
+    set_gap_time(ms){
+        this.gap_time=ms;
+    }
     clear_rx_cache() {
         this.buffer = new Buffer.from([]);//clear all data
     }
@@ -86,6 +88,7 @@ class DlogicReader extends EventEmitter {
 
     //for NTAG it will read 4 page_addr(16bytes) or  1 block addr  of mifare(16 bytes)
     block_read_PK(page_addr, auth_mode = CODE.NTAG_NO_PWD_AUTH_MODE, key) {
+
         if (auth_mode !== CODE.NTAG_PWD_AUTH_MODE) {
             auth_mode = CODE.NTAG_NO_PWD_AUTH_MODE;
             key = new Buffer.alloc(6, 0);
@@ -94,6 +97,77 @@ class DlogicReader extends EventEmitter {
                 key = new Buffer.alloc(6, 0);
             }
         }
+        return new Promise(async (resolve, reject) => {
+            //the write buff  of block is always 16byte.But for  NTAG, reader  only write first 4byte
+            let write_buff = new Buffer.alloc(16, 0);
+         
+
+            if (key.length !== 6) reject('Invalid key length.It must be 6');
+            if (page_addr > 255) reject('Invalid page addr');
+
+            let cmd_ext = [
+                page_addr,
+                0,
+                0,
+                0,
+                ...key,
+            ];
+            let crc = util.crc_calc(cmd_ext);
+            cmd_ext.push(crc);
+
+            let cmd = [
+                0x55,
+                CODE.BLOCK_READ,
+                0xAA,
+                cmd_ext.length,
+                auth_mode,
+                0x00
+            ]
+            crc = util.crc_calc(cmd);
+            cmd.push(crc);
+
+            cmd = Buffer.from(cmd);
+            cmd_ext = Buffer.from(cmd_ext);
+            console.log(cmd);
+            console.log(cmd_ext);
+            try {
+                let fr = await this.send_command_async(cmd);
+                let msg = {};
+                if (fr.type == CODE.ERR_HEADER) {
+                    msg.is_ok=false;
+                    msg.frame= fr.buffer;
+                    msg.cmd = cmd;
+                    msg.desc = 'Fail on 1st cmd send';
+                    reject(msg)
+                } else {
+                    setTimeout(async()=>{
+                        fr = await this.send_command_async(cmd_ext);
+                        if (fr.type == CODE.ERR_HEADER) {
+                            msg.is_ok=false;
+                            msg.frame= fr.buffer;
+                            msg.cmd = cmd_ext;
+                            msg.desc = 'Fail on 2nd cmd send';
+                            reject(msg)
+                        } else {
+                            msg.frame= fr.buffer;
+                            msg.is_ok = true;
+                            msg.cmd = cmd_ext;
+                            msg.desc = 'Command Successfull';
+                            resolve(msg);
+                        }
+                    },this.gap_time)
+                  
+                }
+            } catch (error) {
+                let msg = {
+                    is_ok: false,
+                    frame: error,
+                    desc: 'Exception error'
+                }
+                reject(msg);
+            }
+
+        });
 
     }
     //for NTAG it will write 1 page_addr(4 bytes) although the input is  wraped as  16 byte for compatible
@@ -173,7 +247,7 @@ class DlogicReader extends EventEmitter {
                             msg.desc = 'Command Successfull';
                             resolve(msg);
                         }
-                    },50)
+                    },this.gap_time)
                   
                 }
             } catch (error) {
@@ -369,18 +443,14 @@ class DlogicReader extends EventEmitter {
                     }
                 }
             }
-           // this.removeAllListeners('frame');//remove all listener before
+            this.removeAllListeners('frame');//remove all listener before
             this.once('frame', (frame) => {
                 resolve(frame);
             });
             this.clear_rx_cache();
             this.serialport.write(sn_buff);
         });
-
     }
-
-
-
 }
 
 module.exports = DlogicReader;
