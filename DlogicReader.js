@@ -35,7 +35,7 @@ class DlogicReader extends EventEmitter {
         this.serialport = serialport;
         this.buffer = new Buffer.from([]);
         this.HW_INIT_TIME = 100;//100ms to init hw after reset
-        this.DEFAULT_GAP_TIME_BETWEEN_CMD=60;
+        this.DEFAULT_GAP_TIME_BETWEEN_CMD=80;
         this.CMD_TIMEOUT = 10;//20ms to timeout cmd
         this.TIMEOUT_MSG = 'cmd timeout';
         this.hdl_timeout = null;
@@ -85,7 +85,170 @@ class DlogicReader extends EventEmitter {
 
         }
     }
+    // Linear write byte by byte of all user space memory of tag
+    // the byte_addr:0 is the first userspace memory (the  first byte of block 4 NTAG)
+    linear_write_PK(write_buffer,linear_byte_address=0, auth_mode=CODE.NTAG_NO_PWD_AUTH_MODE,key){
+        if (auth_mode !== CODE.NTAG_PWD_AUTH_MODE) {
+            auth_mode = CODE.NTAG_NO_PWD_AUTH_MODE;
+            key = new Buffer.alloc(6, 0);
+        } else {
+            if (key == undefined) {
+                key = new Buffer.alloc(6, 0);
+            }
+        }
+        return new Promise(async (resolve, reject) => {
 
+            if (key.length !== 6) reject('Invalid key length.It must be 6');
+            if (linear_byte_address > 255) reject('Invalid page addr');
+            write_buffer= Buffer.from(write_buffer);
+            let  wbufflen=write_buffer.length;
+            if (wbufflen > 255) reject('Invalid buffer len');
+
+            let cmd_ext=[
+                linear_byte_address&0x000000FF,
+                (linear_byte_address>>8)&0x000000FF,
+                wbufflen&0x000000FF,
+                (wbufflen>>8)&0x000000FF,
+                ...key,
+                ...write_buffer
+            ];
+            let crc = util.crc_calc(cmd_ext);
+            cmd_ext.push(crc);
+
+            let cmd = [
+                0x55,
+                CODE.LINEAR_WRITE,
+                0xAA,
+                cmd_ext.length,
+                auth_mode,
+                0x00
+            ]
+            crc = util.crc_calc(cmd);
+            cmd.push(crc);
+
+            cmd = Buffer.from(cmd);
+            cmd_ext = Buffer.from(cmd_ext);
+            console.log(cmd);
+            console.log(cmd_ext);
+            try {
+                let fr = await this.send_command_async(cmd);
+                let msg = {};
+                if (fr.type == CODE.ERR_HEADER) {
+                    msg.is_ok=false;
+                    msg.frame= fr.buffer;
+                    msg.cmd = cmd;
+                    msg.desc = 'Fail on 1st cmd send';
+                    reject(msg)
+                } else {
+                    setTimeout(async()=>{
+                        fr = await this.send_command_async(cmd_ext);
+                        if (fr.type == CODE.ERR_HEADER) {
+                            msg.is_ok=false;
+                            msg.frame= fr.buffer;
+                            msg.cmd = cmd_ext;
+                            msg.desc = 'Fail on 2nd cmd send';
+                            reject(msg)
+                        } else {
+                            msg.frame= fr.buffer;
+                            msg.is_ok = true;
+                            msg.cmd = cmd_ext;
+                            msg.desc = 'Command Successfull';
+                            resolve(msg);
+                        }
+                    },this.gap_time)
+                  
+                }
+            } catch (error) {
+                let msg = {
+                    is_ok: false,
+                    frame: error,
+                    desc: 'Exception error'
+                }
+                reject(msg);
+            }
+
+        });
+    }
+    // Linear read byte by byte of all user space memory of tag
+    // the byte_addr:0 is the first userspace memory (the  first byte of block 4 NTAG)
+    linear_read_PK(linear_byte_address, read_length=4, auth_mode=CODE.NTAG_NO_PWD_AUTH_MODE,key){
+        if (auth_mode !== CODE.NTAG_PWD_AUTH_MODE) {
+            auth_mode = CODE.NTAG_NO_PWD_AUTH_MODE;
+            key = new Buffer.alloc(6, 0);
+        } else {
+            if (key == undefined) {
+                key = new Buffer.alloc(6, 0);
+            }
+        }
+        return new Promise(async (resolve, reject) => {
+
+            if (key.length !== 6) reject('Invalid key length.It must be 6');
+            if (linear_byte_address > 255) reject('Invalid page addr');
+            if (read_length > 255) reject('Invalid read len');
+            let cmd_ext=[
+                linear_byte_address&0x000000FF,
+                (linear_byte_address>>8)&0x000000FF,
+                read_length&0x000000FF,
+                (read_length>>8)&0x000000FF,
+                ...key,
+            ];
+            let crc = util.crc_calc(cmd_ext);
+            cmd_ext.push(crc);
+
+            let cmd = [
+                0x55,
+                CODE.LINEAR_READ,
+                0xAA,
+                cmd_ext.length,
+                auth_mode,
+                0x00
+            ]
+            crc = util.crc_calc(cmd);
+            cmd.push(crc);
+
+            cmd = Buffer.from(cmd);
+            cmd_ext = Buffer.from(cmd_ext);
+            console.log(cmd);
+            console.log(cmd_ext);
+            try {
+                let fr = await this.send_command_async(cmd);
+                let msg = {};
+                if (fr.type == CODE.ERR_HEADER) {
+                    msg.is_ok=false;
+                    msg.frame= fr.buffer;
+                    msg.cmd = cmd;
+                    msg.desc = 'Fail on 1st cmd send';
+                    reject(msg)
+                } else {
+                    setTimeout(async()=>{
+                        fr = await this.send_command_async(cmd_ext);
+                        if (fr.type == CODE.ERR_HEADER) {
+                            msg.is_ok=false;
+                            msg.frame= fr.buffer;
+                            msg.cmd = cmd_ext;
+                            msg.desc = 'Fail on 2nd cmd send';
+                            reject(msg)
+                        } else {
+                            msg.frame= fr.buffer;
+                            msg.is_ok = true;
+                            msg.cmd = cmd_ext;
+                            msg.desc = 'Command Successfull';
+                            resolve(msg);
+                        }
+                    },this.gap_time)
+                  
+                }
+            } catch (error) {
+                let msg = {
+                    is_ok: false,
+                    frame: error,
+                    desc: 'Exception error'
+                }
+                reject(msg);
+            }
+
+        });
+    }
     //for NTAG it will read 4 page_addr(16bytes) or  1 block addr  of mifare(16 bytes)
     block_read_PK(page_addr, auth_mode = CODE.NTAG_NO_PWD_AUTH_MODE, key) {
 

@@ -24,7 +24,7 @@ reader.on('ready', async (msg) => {
   console.log(msg);
   reader.clear_rx_cache();
   
-  reader.block_read_PK(4).then((e)=>{
+  reader.linear_write_PK("ABCDEFIJKLMNOPQRSTUVXYZ",0).then((e)=>{
     console.log(e);
   }).catch((e)=>{
     console.log(e);
