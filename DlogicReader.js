@@ -34,7 +34,7 @@ class DlogicReader extends EventEmitter {
 
         this.serialport = serialport;
         this.buffer = new Buffer.from([]);
-        this.HW_INIT_TIME = 100;//100ms to init hw after reset
+        this.HW_INIT_TIME = 60;//100ms to init hw after reset
         this.DEFAULT_GAP_TIME_BETWEEN_CMD=80;
         this.CMD_TIMEOUT = 10;//20ms to timeout cmd
         this.TIMEOUT_MSG = 'cmd timeout';

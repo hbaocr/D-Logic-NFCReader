@@ -17,6 +17,60 @@ exports.CMD_TRAILER       =0xAA
 exports.ACK_TRAILER       =0xCA
 exports.RESPONSE_TRAILER  =0xED
 exports.ERR_TRAILER       =0xCE
+
+
+// AUTH_MODE
+exports.RKA_AUTH1A =0x00
+exports.RKA_AUTH1B =0x01
+exports.PK_AUTH1A=0x60
+exports.PK_AUTH1B=0x61
+
+
+//  See Commands for :  NFC Type 2 Tags
+//These AUTH_MODE below are only For NTAG 21x and Utralight EV1 
+// The following constants are declared for the parameter that determines the method for
+// PWD_AUTH for NTAG 21x, Ultralight EV2 and other T2T tags. 
+exports.T2T_NO_PWD_AUTH  = 0x00 //{same constant value as RKA_AUTH1A}
+exports.T2T_RKA_PWD_AUTH = 0x01 //{same constant value as RKA_AUTH1B}
+exports.T2T_PK_PWD_AUTH  = 0x61 //{same constant value as PK_AUTH1B}
+//These constants are used with the following uFR_COM protocol commands:
+/*
+BLOCK_READ
+BLOCK_WRITE 
+LINEAR_READ 
+LINEAR_WRITE 
+LIN_ROW_READ
+
+and passed as a parameter value controls AUTH_MODE. 
+If you use any other undeclared value as AUTH_MODE, 
+the effect will be the same as if you sent T2T_NO_PWD_AUTH
+When for the AUTH_MODE command parameter you send T2T_RKA_PWD_AUTH or 
+T2T_PK_PWD_AUTH reader will always try to perform PWD_AUTH regardless of the settings 
+in the configuration pages of the tag. For the implementation of the adequate authentication 
+scheme developer is responsible to use T2T_NO_PWD_AUTH for access of the public data that are 
+not protected by a pair of PWD, PACK
+*/
+
+//follow  uFR series NFC reader API.pdf
+/*
+For Mifare Classic tags defines whether to perform authentication with key
+A or key B:
+use KeyA - MIFARE_AUTHENT1A = 0x60
+or KeyB - MIFARE_AUTHENT1B = 0x61
+For NTAG 21x, Ultralight EV1 and other T2T tags supporting
+PWD_AUTH value 0x61 means “use PWD_AUTH“ with BlockRead() or
+BlockRead_PK() functions. Value 0x60 with BlockRead() or
+BlockRead_PK() functions means “without PWD_AUTH“ and in that case
+you can send for ucReaderKeyIndex or aucProvidedKey parameters
+anything you want without influence on the result. For NTAG 21x, Ultralight
+EV1 and other T2T tags supporting PWD_AUTH you can use _AKM1 or
+_AKM2 function variants only without PWD_AUTH in any case of the valid
+values (0x60 or 0x61) provided for this parameter.
+*/
+exports.NTAG_NO_PWD_AUTH_MODE =0x60
+exports.NTAG_PWD_AUTH_MODE =0x61 
+
+
 // CMD codes
 exports.GET_READER_TYPE             =0x10
 exports.GET_READER_SERIAL           =0x11
